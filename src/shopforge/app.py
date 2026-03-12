@@ -1,5 +1,7 @@
 """ShopForge FastAPI application."""
 
+import hashlib
+import hmac
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -8,6 +10,9 @@ from typing import Optional
 import httpx
 from fastapi import FastAPI, Depends, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from pydantic import BaseModel
 
 from shopforge.service import CommerceService
@@ -30,6 +35,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ShopForge", version="0.1.0", lifespan=lifespan)
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -290,7 +299,8 @@ async def get_executive_report(
 
 
 @app.post("/v1/autonomous/analyze")
-async def run_autonomous_analysis(tenant: dict = Depends(require_entitlement("shopforge:full"))):
+@limiter.limit("30/minute")
+async def run_autonomous_analysis(request: Request, tenant: dict = Depends(require_entitlement("shopforge:full"))):
     return await _svc().run_autonomous_analysis()
 
 
@@ -314,7 +324,16 @@ async def create_order_from_medusa(
 
 @app.post("/v1/webhooks/medusa/order-placed")
 async def medusa_order_webhook(request: Request):
-    payload = await request.json()
+    body = await request.body()
+    secret = os.environ.get("MEDUSA_WEBHOOK_SECRET", "")
+    if not secret:
+        raise HTTPException(status_code=503, detail="Webhook verification not configured")
+    sig = request.headers.get("X-Webhook-Signature", "")
+    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig, expected):
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+    import json as _json
+    payload = _json.loads(body)
     result = _svc().handle_medusa_order_webhook(payload)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -349,6 +368,18 @@ async def create_bundle(
     return await _svc().create_bundle(
         body.storefront_key, body.bundle_name, body.product_ids, body.discount
     )
+
+
+# -- Security headers middleware ------------------------------------------------
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 
 if __name__ == "__main__":
