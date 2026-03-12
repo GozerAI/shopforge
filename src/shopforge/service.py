@@ -1,7 +1,7 @@
 """
 Commerce Service - High-level service interface for executives.
 
-Provides a unified API for C-Suite executives to interact with
+Provides a unified API for users and teams to interact with
 multi-storefront commerce operations.
 """
 
@@ -18,24 +18,44 @@ from shopforge.core import (
     Storefront,
     StorefrontRegistry,
 )
-from shopforge.shopify import (
-    ShopifyClient,
-    ShopifyCredentials,
-    ShopifyStorefront,
-)
-from shopforge.medusa import (
-    MedusaClient,
-    MedusaCredentials,
-    MedusaStorefront,
-    NicheStorefront,
-    OrderRouter,
-)
-from shopforge.pricing import (
-    PricingEngine,
-    PricingRecommendation,
-    MarginAnalyzer,
-)
-from shopforge.trends import TrendEnricher
+try:
+    from shopforge.shopify import (
+        ShopifyClient,
+        ShopifyCredentials,
+        ShopifyStorefront,
+    )
+except ImportError:
+    ShopifyClient = None
+    ShopifyCredentials = None
+    ShopifyStorefront = None
+try:
+    from shopforge.medusa import (
+        MedusaClient,
+        MedusaCredentials,
+        MedusaStorefront,
+        NicheStorefront,
+        OrderRouter,
+    )
+except ImportError:
+    MedusaClient = None
+    MedusaCredentials = None
+    MedusaStorefront = None
+    NicheStorefront = None
+    OrderRouter = None
+try:
+    from shopforge.pricing import (
+        PricingEngine,
+        PricingRecommendation,
+        MarginAnalyzer,
+    )
+except ImportError:
+    PricingEngine = None
+    PricingRecommendation = None
+    MarginAnalyzer = None
+try:
+    from shopforge.trends import TrendEnricher
+except ImportError:
+    TrendEnricher = None
 from shopforge.licensing import license_gate
 
 logger = logging.getLogger(__name__)
@@ -56,7 +76,7 @@ except ImportError:
 
 class CommerceService:
     """
-    High-level commerce service for C-Suite executives.
+    High-level commerce service for users and teams.
 
     This service provides a unified interface for:
     - CRO (Axiom): Revenue optimization, pricing strategy
@@ -86,12 +106,12 @@ class CommerceService:
     def __init__(self):
         """Initialize the commerce service."""
         self._registry = StorefrontRegistry()
-        self._shopify_clients: Dict[str, ShopifyStorefront] = {}
-        self._medusa = MedusaStorefront()
-        self._pricing_engine = PricingEngine()
-        self._margin_analyzer = MarginAnalyzer()
-        self._trend_enricher = TrendEnricher()
-        self._order_router = OrderRouter()
+        self._shopify_clients: Dict[str, "ShopifyStorefront"] = {}
+        self._medusa = MedusaStorefront() if MedusaStorefront is not None else None
+        self._pricing_engine = PricingEngine() if PricingEngine is not None else None
+        self._margin_analyzer = MarginAnalyzer() if MarginAnalyzer is not None else None
+        self._trend_enricher = TrendEnricher() if TrendEnricher is not None else None
+        self._order_router = OrderRouter() if OrderRouter is not None else None
 
         self._initialized = False
         self._last_sync: Optional[datetime] = None
@@ -118,6 +138,8 @@ class CommerceService:
             True if connection successful
         """
         try:
+            if ShopifyCredentials is None:
+                raise RuntimeError("This feature requires a commercial license. Visit https://gozerai.com/pricing")
             credentials = ShopifyCredentials(
                 store_url=store_url,
                 access_token=access_token,
@@ -132,7 +154,7 @@ class CommerceService:
                 api_version=api_version,
             )
 
-            self._shopify_clients[key] = ShopifyStorefront(storefront, credentials)
+            self._shopify_clients[key] = ShopifyStorefront(storefront, credentials)  # type: ignore[misc]
             self._registry.register(storefront)
 
             if _HAS_TELEMETRY:
@@ -161,11 +183,13 @@ class CommerceService:
             True if connection successful
         """
         try:
+            if MedusaCredentials is None:
+                raise RuntimeError("This feature requires a commercial license. Visit https://gozerai.com/pricing")
             credentials = MedusaCredentials(
                 base_url=base_url,
                 api_key=api_key,
             )
-            self._medusa = MedusaStorefront(credentials)
+            self._medusa = MedusaStorefront(credentials)  # type: ignore[misc]
 
             # Register niche storefronts
             for sf in self._medusa.list_niche_storefronts():
