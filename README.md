@@ -1,88 +1,133 @@
 # Shopforge
 
-Multi-storefront commerce toolkit with Shopify and Medusa integration, dynamic pricing, and margin analysis.
+**Multi-storefront commerce toolkit with dynamic pricing and margin analysis.**
+
+Part of the [GozerAI](https://gozerai.com) ecosystem.
 
 ## Overview
 
-Shopforge provides a unified interface for managing multiple e-commerce storefronts across platforms. It connects a central Shopify fulfillment hub with niche Medusa-powered storefronts, offering dynamic pricing optimization and portfolio-level margin analysis -- all with zero external dependencies.
-
-## Features
-
-- **Multi-storefront management** -- Register, connect, and manage storefronts across Shopify and Medusa from a single service layer
-- **Shopify Admin API client** -- Full product, collection, order, and inventory management
-- **Medusa backend integration** -- Niche storefronts connected to a central Shopify fulfillment hub with automatic product filtering
-- **Niche storefront architecture** -- Eight pre-configured segments (tech, wellness, fashion, pets, outdoor, eco, creative, productivity)
-- **Dynamic pricing engine** -- Eight strategies: cost-plus, competitive, value-based, dynamic, loss-leader, premium, bundle, penetration
-- **Margin analysis** -- Analyze margins at the product, storefront, or portfolio level with health categorization
-- **Pricing recommendations** -- Actionable suggestions sorted by revenue impact with configurable thresholds
-- **Inventory alerts** -- Low-stock and out-of-stock detection across all connected storefronts
-- **Executive reports** -- Role-specific reports for CRO, CFO, CMO, and COO
+Shopforge provides a unified interface for managing multiple e-commerce storefronts. It includes a product registry, storefront management, inventory alerts, and statistics -- all with zero external dependencies at the library layer. Pro and Enterprise tiers add Shopify/Medusa integration, dynamic pricing, trend enrichment, and audit logging.
 
 ## Installation
 
-```
+```bash
 pip install shopforge
 ```
 
 For development:
 
-```
+```bash
 pip install -e ".[dev]"
 ```
 
 ## Quick Start
 
 ```python
-import asyncio
 from shopforge import CommerceService
 
 service = CommerceService()
 
-# Connect a Shopify storefront
-service.connect_shopify(
+# Register a storefront
+service.register_storefront(
     key="main_store",
-    store_url="mystore.myshopify.com",
-    access_token="shpat_xxxxx",
     name="Main Store",
+    platform="generic",
 )
 
-# Get pricing recommendations
-recommendations = asyncio.run(service.optimize_pricing(
+# Add a product
+service.add_product(
     storefront_key="main_store",
-    target_margin=40.0,
-    strategy="cost_plus",
-))
+    name="Widget Pro",
+    sku="WGT-001",
+    price=29.99,
+    cost=12.00,
+)
 
-# Analyze margins
-margin_report = asyncio.run(service.get_margin_analysis())
+# Check inventory alerts (low stock / out of stock)
+alerts = service.get_inventory_alerts()
+
+# Get storefront statistics
+stats = service.get_stats()
 ```
 
-## Architecture
+## Feature Tiers
 
-```
-src/shopforge/
-    core.py      Data models (Product, Variant, Order, Storefront, Registry)
-    shopify.py   Shopify Admin API client and storefront manager
-    medusa.py    Medusa client, niche storefront definitions and filtering
-    pricing.py   Pricing engine, margin analyzer, recommendation generator
-    service.py   CommerceService -- unified interface for all operations
+| Feature | Community | Pro | Enterprise |
+|---|:---:|:---:|:---:|
+| Storefront registry | x | x | x |
+| Product management | x | x | x |
+| Inventory alerts | x | x | x |
+| Basic statistics | x | x | x |
+| Shopify Admin API integration | | x | x |
+| Medusa backend integration | | x | x |
+| Dynamic pricing engine (8 strategies) | | x | x |
+| Margin analysis and recommendations | | x | x |
+| Trend enrichment | | x | x |
+| Bundle creation | | x | x |
+| Niche storefront architecture | | x | x |
+| Executive reports (CRO, CFO, CMO, COO) | | x | x |
+| Autonomous analysis | | x | x |
+| Audit logging | | | x |
+
+### Gated Features
+
+Pro and Enterprise features require a license key. Set the `VINZY_LICENSE_KEY` environment variable or visit [gozerai.com/pricing](https://gozerai.com/pricing) to upgrade.
+
+## API Endpoints
+
+Start the API server:
+
+```bash
+uvicorn shopforge.app:app --host 0.0.0.0 --port 8002
 ```
 
-## Running Tests
+### Community (shopforge:basic)
 
-```
-pytest tests/ -v
-```
+| Method | Path | Description |
+|---|---|---|
+| GET | `/health` | Health check |
+| GET | `/v1/storefronts` | List storefronts |
+| GET | `/v1/storefronts/{key}` | Storefront detail |
+| POST | `/v1/storefronts/shopify` | Register Shopify storefront |
+| POST | `/v1/storefronts/medusa` | Register Medusa storefront |
+| GET | `/v1/products/{storefront_key}` | List products |
+| GET | `/v1/inventory/alerts` | Inventory alerts |
+| GET | `/v1/stats` | Service statistics |
+
+### Pro (shopforge:full)
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/v1/analytics` | Portfolio analytics |
+| GET | `/v1/analytics/{storefront_key}` | Storefront analytics |
+| POST | `/v1/pricing/optimize` | Run pricing optimization |
+| GET | `/v1/margins` | Margin analysis |
+| PUT | `/v1/pricing/update/{storefront_key}` | Apply pricing changes |
+| POST | `/v1/sync/medusa` | Sync Medusa catalog |
+| GET | `/v1/executive/{code}` | Executive report |
+| POST | `/v1/autonomous/analyze` | Autonomous analysis cycle |
+| GET | `/v1/niche/summary` | Niche segment summary |
+| POST | `/v1/orders/from-medusa` | Import Medusa orders |
+| POST | `/v1/webhooks/medusa/order-placed` | Medusa order webhook |
+| GET | `/v1/trends/enrich/{storefront_key}` | Trend enrichment |
+| GET | `/v1/trends/analysis` | Trend analysis |
+| POST | `/v1/bundles/create` | Create product bundle |
+
+## Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `ZUULTIMATE_BASE_URL` | `http://localhost:8000` | Auth service URL |
+| `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated allowed origins |
+| `VINZY_LICENSE_KEY` | (empty) | License key for Pro/Enterprise features |
+| `VINZY_SERVER` | `http://localhost:8080` | License validation server |
 
 ## Requirements
 
 - Python >= 3.10
-- No external dependencies (stdlib only)
+- No external dependencies for the library (stdlib only)
+- FastAPI + httpx + slowapi for the API server
 
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.
-
-## Author
-
-Chris Arseno
