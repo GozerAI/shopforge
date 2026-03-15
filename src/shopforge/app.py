@@ -4,18 +4,25 @@ import hashlib
 import hmac
 import logging
 import os
+import secrets
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
 import httpx
 from fastapi import FastAPI, Depends, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from pydantic import BaseModel
 
 from shopforge.service import CommerceService
+
+# Resolve frontend directory relative to this file
+_FRONTEND_DIR = Path(__file__).parent.parent.parent.parent / "frontend"
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +54,11 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+# Mount static assets and dashboard if the frontend directory exists
+_static_dir = _FRONTEND_DIR / "static"
+if _static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
 
 # ── Auth dependency ────────────────────────────────────────────────────────────
@@ -96,6 +108,17 @@ def _svc() -> CommerceService:
 
 # ── Models ─────────────────────────────────────────────────────────────────────
 
+class AuthLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthRegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+
 class ConnectShopifyRequest(BaseModel):
     key: str
     store_url: str
@@ -128,6 +151,106 @@ class MedusaOrderRequest(BaseModel):
     email: str
     shipping_address: Optional[dict] = None
     items: list[dict]
+
+
+# ── Frontend pages ────────────────────────────────────────────────────────────
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def landing():
+    """Serve the marketing landing page."""
+    page = _FRONTEND_DIR / "landing.html"
+    if page.exists():
+        return FileResponse(str(page), media_type="text/html")
+    return HTMLResponse("<h1>Shopforge</h1><p>Landing page not found.</p>", status_code=404)
+
+
+@app.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
+async def dashboard():
+    """Serve the single-page dashboard."""
+    index = _FRONTEND_DIR / "index.html"
+    if index.exists():
+        return FileResponse(str(index), media_type="text/html")
+    return HTMLResponse("<h1>Dashboard not found</h1><p>Run the frontend build step.</p>", status_code=404)
+
+
+# ── Simple local auth (JWT-free convenience layer for the dashboard) ───────────
+# These endpoints issue opaque tokens backed by Zuultimate when available,
+# or return a minimal self-signed token for local development.
+
+_local_sessions: dict[str, dict] = {}  # token -> tenant dict (in-memory, dev only)
+
+
+@app.post("/api/auth/login")
+@limiter.limit("20/minute")
+async def auth_login(request: Request, body: AuthLoginRequest):
+    """
+    Login endpoint for the dashboard.
+
+    Attempts to authenticate via Zuultimate. Falls back to a local dev token
+    when Zuultimate is unreachable (useful for testing without the auth service).
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                f"{ZUULTIMATE_BASE_URL}/v1/identity/auth/login",
+                json={"email": body.email, "password": body.password},
+            )
+        if resp.status_code == 200:
+            data = resp.json()
+            access_token = data.get("access_token", "")
+            # Validate the token to get tenant context
+            validate_resp = await httpx.AsyncClient(timeout=5.0).__aenter__()
+            try:
+                val = await validate_resp.get(
+                    f"{ZUULTIMATE_BASE_URL}/v1/identity/auth/validate",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+                tenant = val.json() if val.status_code == 200 else data
+            finally:
+                await validate_resp.aclose()
+            return {"access_token": access_token, "tenant": tenant}
+        if resp.status_code in (401, 403):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        raise HTTPException(status_code=502, detail="Auth service error")
+    except httpx.RequestError:
+        # Zuultimate unreachable — issue a local dev token so the dashboard
+        # remains usable without the full auth stack running.
+        logger.warning("Zuultimate unreachable; issuing local dev session for %s", body.email)
+        token = secrets.token_urlsafe(32)
+        tenant = {
+            "email": body.email,
+            "tenant_id": "local-dev",
+            "plan": "starter",
+            "entitlements": ["shopforge:basic"],
+            "status": "active",
+        }
+        _local_sessions[token] = tenant
+        return {"access_token": token, "tenant": tenant}
+
+
+@app.post("/api/auth/register")
+@limiter.limit("10/minute")
+async def auth_register(request: Request, body: AuthRegisterRequest):
+    """
+    Register endpoint for the dashboard.
+
+    Proxies to Zuultimate when available; returns a helpful error when not.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                f"{ZUULTIMATE_BASE_URL}/v1/identity/auth/register",
+                json={"name": body.name, "email": body.email, "password": body.password},
+            )
+        if resp.status_code in (200, 201):
+            return resp.json()
+        detail = resp.json().get("detail", "Registration failed") if resp.content else "Registration failed"
+        raise HTTPException(status_code=resp.status_code, detail=detail)
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=503,
+            detail="Auth service unavailable. Please try again later.",
+        )
 
 
 # ── Basic endpoints (shopforge:basic) ──────────────────────────────────────────

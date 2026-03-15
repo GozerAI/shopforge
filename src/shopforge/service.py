@@ -1,7 +1,7 @@
 """
 Commerce Service - High-level service interface for executives.
 
-Provides a unified API for interacting with
+Provides a unified API for C-Suite executives to interact with
 multi-storefront commerce operations.
 """
 
@@ -18,40 +18,24 @@ from shopforge.core import (
     Storefront,
     StorefrontRegistry,
 )
-try:
-    from shopforge.shopify import (
-        ShopifyClient,
-        ShopifyCredentials,
-        ShopifyStorefront,
-    )
-    _HAS_SHOPIFY = True
-except ImportError:
-    _HAS_SHOPIFY = False
-try:
-    from shopforge.medusa import (
-        MedusaClient,
-        MedusaCredentials,
-        MedusaStorefront,
-        NicheStorefront,
-        OrderRouter,
-    )
-    _HAS_MEDUSA = True
-except ImportError:
-    _HAS_MEDUSA = False
-try:
-    from shopforge.pricing import (
-        PricingEngine,
-        PricingRecommendation,
-        MarginAnalyzer,
-    )
-    _HAS_PRICING = True
-except ImportError:
-    _HAS_PRICING = False
-try:
-    from shopforge.trends import TrendEnricher
-    _HAS_TRENDS = True
-except ImportError:
-    _HAS_TRENDS = False
+from shopforge.shopify import (
+    ShopifyClient,
+    ShopifyCredentials,
+    ShopifyStorefront,
+)
+from shopforge.medusa import (
+    MedusaClient,
+    MedusaCredentials,
+    MedusaStorefront,
+    NicheStorefront,
+    OrderRouter,
+)
+from shopforge.pricing import (
+    PricingEngine,
+    PricingRecommendation,
+    MarginAnalyzer,
+)
+from shopforge.trends import TrendEnricher
 from shopforge.licensing import license_gate
 
 logger = logging.getLogger(__name__)
@@ -70,9 +54,33 @@ except ImportError:
     _HAS_TELEMETRY = False
 
 
+def _validate_url(url: str) -> bool:
+    """Validate URL to prevent SSRF attacks.
+
+    Rejects private, loopback, and link-local IP addresses.
+    Only allows http/https schemes.
+    """
+    from urllib.parse import urlparse
+    import socket
+    import ipaddress
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https'):
+            return False
+        if not parsed.hostname:
+            return False
+        ip = socket.gethostbyname(parsed.hostname)
+        addr = ipaddress.ip_address(ip)
+        if addr.is_private or addr.is_loopback or addr.is_link_local:
+            return False
+        return True
+    except Exception:
+        return False
+
+
 class CommerceService:
     """
-    High-level commerce service for users.
+    High-level commerce service for C-Suite executives.
 
     This service provides a unified interface for:
     - CRO (Axiom): Revenue optimization, pricing strategy
@@ -103,11 +111,11 @@ class CommerceService:
         """Initialize the commerce service."""
         self._registry = StorefrontRegistry()
         self._shopify_clients: Dict[str, ShopifyStorefront] = {}
-        self._medusa = MedusaStorefront() if _HAS_MEDUSA else None
-        self._pricing_engine = PricingEngine() if _HAS_PRICING else None
-        self._margin_analyzer = MarginAnalyzer() if _HAS_PRICING else None
-        self._trend_enricher = TrendEnricher() if _HAS_TRENDS else None
-        self._order_router = OrderRouter() if _HAS_MEDUSA else None
+        self._medusa = MedusaStorefront()
+        self._pricing_engine = PricingEngine()
+        self._margin_analyzer = MarginAnalyzer()
+        self._trend_enricher = TrendEnricher()
+        self._order_router = OrderRouter()
 
         self._initialized = False
         self._last_sync: Optional[datetime] = None
@@ -133,6 +141,10 @@ class CommerceService:
         Returns:
             True if connection successful
         """
+        full_url = f"https://{store_url}"
+        if not _validate_url(full_url):
+            logger.error(f"SSRF blocked: invalid store URL {store_url}")
+            return False
         try:
             credentials = ShopifyCredentials(
                 store_url=store_url,
@@ -176,6 +188,9 @@ class CommerceService:
         Returns:
             True if connection successful
         """
+        if not _validate_url(base_url):
+            logger.error(f"SSRF blocked: invalid Medusa base URL {base_url}")
+            return False
         try:
             credentials = MedusaCredentials(
                 base_url=base_url,

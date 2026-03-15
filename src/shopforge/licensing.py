@@ -30,10 +30,10 @@ PRICING_URL = "https://gozerai.com/pricing"
 
 # Feature flag → human-readable name + required tier
 _FEATURE_TIER_MAP = {
-    # Pro (Tier 2)
+    # Pro — Single $29/mo or Platform $99/mo
     "std.shopforge.advanced": ("Shopforge Advanced Commerce", "Pro"),
-    # Enterprise (Tier 1)
-    "std.shopforge.enterprise": ("Shopforge Enterprise Reports", "Enterprise"),
+    # Growth — Single $79/mo or Platform $349/mo
+    "std.shopforge.enterprise": ("Shopforge Enterprise Reports", "Growth"),
 }
 
 
