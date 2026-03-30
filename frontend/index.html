@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShopForge</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="app">
+    <div id="login-view" class="view">
+        <div class="auth-container">
+            <h1>Shop<span class="accent">Forge</span></h1>
+            <p class="tagline">Commerce intelligence, automated</p>
+            <form id="login-form">
+                <input type="email" id="login-email" placeholder="Email" required>
+                <input type="password" id="login-password" placeholder="Password" required>
+                <button type="submit" class="btn-primary">Sign In</button>
+            </form>
+            <div id="login-error" class="form-error hidden"></div>
+            <p class="alt-action">New here? <a href="#" id="show-signup">Create an account</a></p>
+        </div>
+    </div>
+    <div id="signup-view" class="view hidden">
+        <div class="auth-container">
+            <h1>Shop<span class="accent">Forge</span></h1>
+            <p class="tagline">Create your account</p>
+            <form id="signup-form">
+                <input type="text" id="signup-name" placeholder="Name" required>
+                <input type="email" id="signup-email" placeholder="Email" required>
+                <input type="password" id="signup-password" placeholder="Password (8+ characters)" required minlength="8">
+                <button type="submit" class="btn-primary">Create Account</button>
+            </form>
+            <div id="signup-error" class="form-error hidden"></div>
+            <p class="alt-action">Already have an account? <a href="#" id="show-login-from-signup">Sign in</a></p>
+        </div>
+    </div>
+    <div id="dashboard-view" class="view hidden">
+        <div class="shell">
+            <aside class="sidebar">
+                <div class="sidebar-brand">Shop<span class="accent">Forge</span></div>
+                <nav class="sidebar-nav">
+                    <button class="nav-item active" data-page="overview">Overview</button>
+                    <button class="nav-item" data-page="storefronts">Storefronts</button>
+                    <button class="nav-item" data-page="inventory">Inventory</button>
+                    <button class="nav-item" data-page="analytics">Analytics <span class="badge badge-pro">Pro</span></button>
+                    <button class="nav-item" data-page="billing">Billing</button>
+                    <button class="nav-item" data-page="settings">Settings</button>
+                </nav>
+                <div class="sidebar-footer"><button id="logout-btn">Sign out</button></div>
+            </aside>
+            <div class="main">
+                <div class="topbar"><h2 id="page-title">Overview</h2><span id="plan-badge"></span></div>
+                <div id="page-overview" class="page-content"></div>
+                <div id="page-storefronts" class="page-content hidden"></div>
+                <div id="page-inventory" class="page-content hidden"></div>
+                <div id="page-analytics" class="page-content hidden"></div>
+                <div id="page-billing" class="page-content hidden"></div>
+                <div id="page-settings" class="page-content hidden"></div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>
